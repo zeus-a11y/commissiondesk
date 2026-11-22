@@ -9,6 +9,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.sql.Date;
+import java.time.Duration;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
@@ -47,7 +48,10 @@ class CommissionDeskIntegrationTest {
     if (EXTERNAL != null && !EXTERNAL.isBlank()) {
       registry.add("spring.datasource.url", () -> EXTERNAL);
     } else {
-      oracle = new OracleContainer("gvenzl/oracle-free:23-slim").withUsername("commission").withPassword("commission");
+      // faststart ships a ready database; give it time on slow machines all the same
+      oracle = new OracleContainer("gvenzl/oracle-free:23-slim-faststart")
+          .withUsername("commission").withPassword("commission")
+          .withStartupTimeout(Duration.ofMinutes(5));
       oracle.start();
       // the container's app user lacks CREATE JOB, which the scheduler migration needs
       oracle.execInContainer("bash", "-c",
