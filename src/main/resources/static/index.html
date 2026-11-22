@@ -1,0 +1,189 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CommissionDesk</title>
+<style>
+  :root {
+    --bg: #f6f7f9; --surface: #fff; --text: #1b2330; --muted: #5d6878; --line: #e2e6ec;
+    --accent: #1f5fbf; --accent-ink: #fff; --bad: #b3261e; --bad-bg: #fde8e6; --ok: #1e6b3a; --ok-bg: #e3f4e8;
+    --warn: #8a5a00; --warn-bg: #fdf1d8; color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #11151b; --surface: #1a2029; --text: #e5e9ef; --muted: #9aa5b4; --line: #2b3340;
+      --accent: #6ea3ff; --accent-ink: #0b1220; --bad: #ff8a80; --bad-bg: #3a1c1a; --ok: #7fd69b; --ok-bg: #16301f;
+      --warn: #f3c26b; --warn-bg: #352a14; color-scheme: dark; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.5 system-ui, "Segoe UI", Roboto, sans-serif; }
+  header { display: flex; align-items: baseline; gap: 16px; padding: 12px 24px; background: var(--surface); border-bottom: 1px solid var(--line); }
+  header h1 { font-size: 17px; margin: 0; } header span { color: var(--muted); font-size: 13px; }
+  main { max-width: 1200px; margin: 0 auto; padding: 20px 24px; }
+  h2 { font-size: 16px; margin: 0 0 10px; }
+  .card { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 16px; margin-bottom: 16px; }
+  .row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+  .grow { flex: 1; }
+  .muted { color: var(--muted); } .small { font-size: 12.5px; }
+  .num { text-align: right; font-variant-numeric: tabular-nums; }
+  .neg { color: var(--bad); }
+  button, select, input { font: inherit; border-radius: 8px; padding: 6px 12px; border: 1px solid var(--line); background: var(--surface); color: var(--text); }
+  button { cursor: pointer; } button.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); font-weight: 600; }
+  button:disabled { opacity: .5; cursor: default; }
+  .wrap { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; }
+  th, td { padding: 7px 10px; border-bottom: 1px solid var(--line); text-align: left; white-space: nowrap; }
+  th { font-size: 12px; color: var(--muted); font-weight: 600; }
+  tr.pick { cursor: pointer; } tr.pick:hover td, tr.sel td { background: var(--bg); }
+  .badge { padding: 1px 8px; border-radius: 999px; font-size: 12px; font-weight: 600; }
+  .APPROVED { color: var(--ok); background: var(--ok-bg); } .CALCULATED { color: var(--warn); background: var(--warn-bg); }
+  .msg { padding: 8px 12px; border-radius: 8px; margin: 0 0 12px; }
+  .msg.err { color: var(--bad); background: var(--bad-bg); } .msg.ok { color: var(--ok); background: var(--ok-bg); }
+  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin-bottom: 12px; }
+  .stat { border: 1px solid var(--line); border-radius: 8px; padding: 8px 12px; }
+  .stat b { display: block; font-size: 18px; font-variant-numeric: tabular-nums; } .stat span { font-size: 12px; color: var(--muted); }
+  [hidden] { display: none !important; }
+  @media (max-width: 640px) { main, header { padding-left: 16px; padding-right: 16px; } }
+</style>
+</head>
+<body>
+<header><h1>CommissionDesk</h1><span id="today"></span></header>
+<main>
+  <p id="msg" class="msg" hidden></p>
+
+  <section class="card">
+    <div class="row">
+      <h2 class="grow">Monthly commission runs</h2>
+      <label class="small muted">Month <input id="period" type="month"></label>
+      <button class="primary" id="calc">Calculate</button>
+    </div>
+    <div class="wrap"><table>
+      <thead><tr><th>Month</th><th>Status</th><th class="num">Receipts</th><th class="num">Exceptions</th>
+        <th class="num">Commission</th><th class="num">Clawback</th><th class="num">TDS</th><th class="num">Net payable</th><th class="num">Run time</th></tr></thead>
+      <tbody id="runs"></tbody>
+    </table></div>
+  </section>
+
+  <section class="card" id="detail" hidden>
+    <div class="row">
+      <h2 class="grow" id="detailTitle"></h2>
+      <select id="branch"><option value="">All branches</option><option>Mumbai West</option><option>Thane</option><option>Pune</option></select>
+      <button id="approve" class="primary">Approve and lock</button>
+    </div>
+    <div class="stats" id="stats"></div>
+    <div class="wrap"><table>
+      <thead><tr><th>#</th><th>Agent</th><th>Branch</th><th class="num">Base</th><th class="num">Override</th><th class="num">Bonus</th>
+        <th class="num">Clawback</th><th class="num">Brought fwd</th><th class="num">TDS</th><th class="num">Net</th><th class="num">FY to date</th></tr></thead>
+      <tbody id="stmts"></tbody>
+    </table></div>
+    <div id="lines" hidden>
+      <h2 style="margin-top:16px" id="linesTitle"></h2>
+      <div class="wrap"><table>
+        <thead><tr><th>Type</th><th>Premium</th><th>Policy</th><th class="num">Basis</th><th class="num">Rate %</th><th class="num">Amount</th></tr></thead>
+        <tbody id="lineRows"></tbody>
+      </table></div>
+    </div>
+    <div id="excWrap" hidden>
+      <h2 style="margin-top:16px">Exceptions queue</h2>
+      <div class="wrap"><table>
+        <thead><tr><th>Policy</th><th>Product</th><th>Agent</th><th>Reason</th></tr></thead>
+        <tbody id="exc"></tbody>
+      </table></div>
+    </div>
+  </section>
+</main>
+<script>
+  const $ = (id) => document.getElementById(id);
+  const inr = new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 });
+  const money = (v) => `<span class="${v < 0 ? 'neg' : ''}">${inr.format(v || 0)}</span>`;
+  const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  // periods travel as 'YYYY-MM' keys, so no time zone can shift them
+  const month = (key) => { const [y, m] = key.split('-').map(Number); return new Date(y, m - 1, 1).toLocaleDateString('en-IN', { month: 'short', year: 'numeric' }); };
+  const nextKey = (key) => { const [y, m] = key.split('-').map(Number); return m === 12 ? `${y + 1}-01` : `${y}-${String(m + 1).padStart(2, '0')}`; };
+  let current = null;
+
+  async function api(path, opts = {}) {
+    const res = await fetch(path, { headers: { 'Content-Type': 'application/json' }, ...opts });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(body.detail || res.statusText);
+    return body;
+  }
+  function say(text, ok) {
+    $('msg').textContent = text; $('msg').className = 'msg ' + (ok ? 'ok' : 'err'); $('msg').hidden = !text;
+  }
+
+  async function loadRuns() {
+    const { today, runs } = await api('/api/runs');
+    $('today').textContent = 'Business date ' + new Date(today).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+    if (!$('period').value) {
+      const latest = runs[0];
+      $('period').value = !latest ? String(today).slice(0, 7)
+        : latest.STATUS === 'APPROVED' ? nextKey(latest.PERIOD_KEY) : latest.PERIOD_KEY;
+    }
+    $('runs').innerHTML = runs.map((r) => `
+      <tr class="pick ${current === r.RUN_ID ? 'sel' : ''}" data-id="${r.RUN_ID}">
+        <td>${month(r.PERIOD_KEY)}</td><td><span class="badge ${r.STATUS}">${r.STATUS.toLowerCase()}</span></td>
+        <td class="num">${r.RECEIPTS.toLocaleString('en-IN')}</td><td class="num">${r.EXCEPTIONS}</td>
+        <td class="num">${money(r.BASE_AMOUNT + r.OVERRIDE_AMOUNT + r.BONUS_AMOUNT)}</td><td class="num">${money(r.CLAWBACK_AMOUNT)}</td>
+        <td class="num">${money(r.TDS_AMOUNT)}</td><td class="num">${money(r.NET_PAYABLE)}</td><td class="num">${(r.ELAPSED_MS / 1000).toFixed(2)} s</td>
+      </tr>`).join('');
+    document.querySelectorAll('#runs tr').forEach((tr) => tr.onclick = () => openRun(+tr.dataset.id));
+  }
+
+  async function openRun(id) {
+    current = id;
+    const run = await api('/api/runs/' + id);
+    $('detail').hidden = false; $('lines').hidden = true;
+    $('detailTitle').textContent = `${month(run.PERIOD_KEY)} · run ${run.RUN_ID}`;
+    $('approve').hidden = run.STATUS === 'APPROVED';
+    $('stats').innerHTML = [
+      ['Agents paid', run.AGENTS_PAID], ['Base', inr.format(run.BASE_AMOUNT)], ['Overrides', inr.format(run.OVERRIDE_AMOUNT)],
+      ['Bonus', inr.format(run.BONUS_AMOUNT)], ['Clawback', inr.format(run.CLAWBACK_AMOUNT)], ['GST payable (RCM)', inr.format(run.GST_RCM)],
+    ].map(([k, v]) => `<div class="stat"><b>${v}</b><span>${k}</span></div>`).join('');
+    $('excWrap').hidden = !run.exceptionsList.length;
+    $('exc').innerHTML = run.exceptionsList.slice(0, 200).map((e) => `<tr><td>${esc(e.POLICY_NO)}</td><td>${esc(e.PRODUCT_CODE)}</td>
+      <td>${esc(e.AGENT_CODE)}</td><td>${esc(e.MESSAGE)}</td></tr>`).join('');
+    await loadStatements();
+    await loadRuns();
+  }
+
+  async function loadStatements() {
+    const q = $('branch').value ? '?branch=' + encodeURIComponent($('branch').value) : '';
+    const rows = await api(`/api/runs/${current}/statements${q}`);
+    $('stmts').innerHTML = rows.map((s) => `<tr class="pick" data-agent="${esc(s.AGENT_CODE)}" data-name="${esc(s.NAME)}">
+      <td>${s.BRANCH_RANK}</td><td>${esc(s.NAME)} <span class="muted small">${esc(s.AGENT_CODE)} · ${esc(s.AGENT_LEVEL.toLowerCase())}</span></td>
+      <td>${esc(s.BRANCH)}</td><td class="num">${money(s.BASE_AMOUNT)}</td><td class="num">${money(s.OVERRIDE_AMOUNT)}</td>
+      <td class="num">${money(s.BONUS_AMOUNT)}</td><td class="num">${money(s.CLAWBACK_AMOUNT)}</td><td class="num">${money(s.BROUGHT_FORWARD)}</td>
+      <td class="num">${money(s.TDS_AMOUNT)}${s.TDS_RATE === 20 ? ' <span class="small neg">20%</span>' : ''}</td>
+      <td class="num"><b>${money(s.NET_PAYABLE)}</b></td><td class="num">${money(s.FYTD_TAXABLE)}</td></tr>`).join('');
+    document.querySelectorAll('#stmts tr').forEach((tr) => tr.onclick = () => openLines(tr.dataset.agent, tr.dataset.name));
+  }
+
+  async function openLines(agent, name) {
+    const rows = await api(`/api/runs/${current}/statements/${encodeURIComponent(agent)}/lines`);
+    $('lines').hidden = false;
+    $('linesTitle').textContent = `${name}: ${rows.length} postings`;
+    $('lineRows').innerHTML = rows.map((l) => `<tr><td>${l.TXN_TYPE.toLowerCase()}</td><td>${esc(l.PREMIUM_YEAR)}</td><td>${esc(l.POLICY_NO ?? '—')}</td>
+      <td class="num">${money(l.BASIS_AMOUNT)}</td><td class="num">${l.RATE_PCT}</td><td class="num">${money(l.AMOUNT)}</td></tr>`).join('');
+    $('lines').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
+
+  $('calc').onclick = async () => {
+    $('calc').disabled = true; say('');
+    try {
+      const run = await api('/api/runs', { method: 'POST', body: JSON.stringify({ period: $('period').value }) });
+      say(`Calculated ${month(run.PERIOD_KEY)}: ${run.RECEIPTS.toLocaleString('en-IN')} receipts, ${run.EXCEPTIONS} exceptions, in ${(run.ELAPSED_MS / 1000).toFixed(2)} s.`, true);
+      await openRun(run.RUN_ID);
+    } catch (e) { say(e.message); } finally { $('calc').disabled = false; }
+  };
+  $('approve').onclick = async () => {
+    say('');
+    try { await api(`/api/runs/${current}/approve`, { method: 'POST', body: JSON.stringify({ approvedBy: 'ops.lead' }) });
+      say('Run approved and locked.', true); $('period').value = ''; await openRun(current);
+    } catch (e) { say(e.message); }
+  };
+  $('branch').onchange = loadStatements;
+  loadRuns().catch((e) => say(e.message));
+</script>
+</body>
+</html>
